@@ -1,1 +1,682 @@
 
+%% ========================================================================
+%  MODELISATION DE L'EVOLUTION DE LA TEMPERATURE GLOBALE MOYENNE SUR TERRE
+%  Projet complet - Analyse des 4 modèles
+%  ========================================================================
+
+clear all; close all; clc;
+
+%% ========================================================================
+%  PARTIE 1: PARAMETRES PHYSIQUES
+%% ========================================================================
+
+% Constantes physiques
+Q = 342;                    % Flux solaire incident moyen [W/m^2]
+alpha_terre = 0.3;          % Albedo planetaire terrestre
+sigma = 5.67e-8;            % Constante de Stefan-Boltzmann [W/(m^2·K^4)]
+C = 2.92e8;                 % Capacite calorifique [J/(m^2·K)]
+epsilon = 0.61;             % Emissivite atmospherique effective
+A = 202;                    % Parametre OLR [W/m^2]
+B = 1.90;                   % Parametre OLR [W/(m^2·K)]
+
+% Parametres de simulation
+tspan = [0 10000*365*24*3600];  % 10000 ans en secondes
+T0_K = 280;                      % Temperature initiale [K]
+T0_C = 15;                       % Temperature initiale [C]
+
+fprintf('========================================\n');
+fprintf('SIMULATION DES MODELES CLIMATIQUES\n');
+fprintf('========================================\n\n');
+
+%% ========================================================================
+%  PARTIE 2: MODELE 1 - EQUILIBRE RADIATIF SIMPLE
+%% ========================================================================
+
+fprintf('--- MODELE 1: Equilibre radiatif simple ---\n');
+
+% Calcul analytique de la temperature d'equilibre
+T_eq1 = ((Q*(1-alpha_terre))/sigma)^0.25;
+fprintf('Temperature d''equilibre (analytique): %.2f K (%.2f C)\n', ...
+        T_eq1, T_eq1-273.15);
+
+% Resolution numerique
+dTdt1 = @(t,T) (Q*(1-alpha_terre) - sigma*T^4)/C;
+options = odeset('RelTol',1e-8,'AbsTol',1e-10);
+[t1, T1] = ode45(dTdt1, tspan, T0_K, options);
+t1_years = t1/(365*24*3600);
+
+% Temps de relaxation
+tau1 = abs(C/(4*sigma*T_eq1^3))/(365*24*3600);
+fprintf('Temps de relaxation: %.2f ans\n', tau1);
+fprintf('Ecart avec observation (288K): %.2f K\n\n', T_eq1-288);
+
+% Figure 1: Evolution temporelle Modele 1
+figure('Position', [100 100 1400 500]);
+sgtitle('MODELE 1: Equilibre Radiatif Simple', 'FontSize', 16, 'FontWeight', 'bold');
+
+subplot(1,3,1);
+plot(t1_years, T1, 'b-', 'LineWidth', 2);
+hold on;
+yline(T_eq1, 'r--', 'LineWidth', 2, 'Label', sprintf('T_{eq} = %.1f K', T_eq1));
+yline(288, 'g--', 'LineWidth', 2, 'Label', 'Obs. = 288 K');
+xlabel('Temps (annees)', 'FontSize', 12);
+ylabel('Temperature (K)', 'FontSize', 12);
+title('Evolution temporelle', 'FontSize', 13);
+grid on;
+legend('Location', 'best');
+
+subplot(1,3,2);
+idx_zoom = find(t1_years > 9000 & t1_years < 9010);
+plot(t1_years(idx_zoom), T1(idx_zoom), 'b-', 'LineWidth', 1.5);
+xlabel('Temps (annees)', 'FontSize', 12);
+ylabel('Temperature (K)', 'FontSize', 12);
+title('Zoom: Oscillations saisonnieres', 'FontSize', 13);
+grid on;
+
+subplot(1,3,3);
+plot(t1_years, T1-273.15, 'b-', 'LineWidth', 2);
+hold on;
+yline(T_eq1-273.15, 'r--', 'LineWidth', 2);
+yline(15, 'g--', 'LineWidth', 2);
+xlabel('Temps (annees)', 'FontSize', 12);
+ylabel('Temperature (C)', 'FontSize', 12);
+title('Evolution en Celsius', 'FontSize', 13);
+grid on;
+
+saveas(gcf, 'modele1_evolution.png');
+
+%% Analyse de sensibilite a l'albedo (Modele 1)
+fprintf('Analyse de sensibilite a l''albedo...\n');
+
+alpha_range = linspace(0, 0.9, 100);
+T_eq_alpha = zeros(size(alpha_range));
+
+for i = 1:length(alpha_range)
+    T_eq_alpha(i) = ((Q*(1-alpha_range(i)))/sigma)^0.25;
+end
+
+% Calcul du gradient
+dTdalpha_numerical = gradient(T_eq_alpha, alpha_range);
+dTdalpha_analytical = -Q./(4*sigma*T_eq_alpha.^3);
+
+figure('Position', [100 100 1400 500]);
+sgtitle('MODELE 1: Analyse de Sensibilite a l''Albedo', 'FontSize', 16, 'FontWeight', 'bold');
+
+subplot(1,3,1);
+plot(alpha_range, T_eq_alpha, 'b-', 'LineWidth', 2);
+hold on;
+plot(alpha_terre, T_eq1, 'ro', 'MarkerSize', 12, 'LineWidth', 2);
+xlabel('Albedo \alpha', 'FontSize', 12);
+ylabel('Temperature d''equilibre (K)', 'FontSize', 12);
+title('T_{eq} en fonction de \alpha', 'FontSize', 13);
+grid on;
+legend('T_{eq}(\alpha)', sprintf('Terre (\\alpha=%.1f)', alpha_terre), 'Location', 'best');
+
+subplot(1,3,2);
+plot(alpha_range, T_eq_alpha-273.15, 'b-', 'LineWidth', 2);
+hold on;
+plot(alpha_terre, T_eq1-273.15, 'ro', 'MarkerSize', 12, 'LineWidth', 2);
+yline(15, 'g--', 'LineWidth', 2, 'Label', 'Observation');
+xlabel('Albedo \alpha', 'FontSize', 12);
+ylabel('Temperature d''equilibre (C)', 'FontSize', 12);
+title('T_{eq} en Celsius', 'FontSize', 13);
+grid on;
+legend('Location', 'best');
+
+subplot(1,3,3);
+plot(alpha_range, dTdalpha_analytical, 'b-', 'LineWidth', 2);
+hold on;
+plot(alpha_terre, -Q/(4*sigma*T_eq1^3), 'ro', 'MarkerSize', 12, 'LineWidth', 2);
+xlabel('Albedo \alpha', 'FontSize', 12);
+ylabel('dT_{eq}/d\alpha (K)', 'FontSize', 12);
+title('Sensibilite (gradient)', 'FontSize', 13);
+grid on;
+legend('Gradient analytique', 'Valeur actuelle', 'Location', 'best');
+
+saveas(gcf, 'modele1_sensibilite_albedo.png');
+
+%% Cas extremes d'albedo
+fprintf('\nCas extremes d''albedo:\n');
+albedos_test = [0, 0.1, 0.3, 0.5, 0.7, 0.9];
+for alpha_test = albedos_test
+    T_test = ((Q*(1-alpha_test))/sigma)^0.25;
+    fprintf('  alpha = %.1f: T_eq = %.2f K (%.2f C)\n', ...
+            alpha_test, T_test, T_test-273.15);
+end
+fprintf('\n');
+
+%% ========================================================================
+%  PARTIE 3: MODELE 2 - AVEC EMISSIVITE ATMOSPHERIQUE
+%% ========================================================================
+
+fprintf('--- MODELE 2: Avec emissivite atmospherique ---\n');
+
+% Temperature d'equilibre
+T_eq2 = ((Q*(1-alpha_terre))/(epsilon*sigma))^0.25;
+fprintf('Temperature d''equilibre: %.2f K (%.2f C)\n', T_eq2, T_eq2-273.15);
+fprintf('Facteur d''amplification: %.3f\n', (1/epsilon)^0.25);
+fprintf('Effet de serre: +%.2f K\n', T_eq2 - T_eq1);
+fprintf('Ecart avec observation: %.2f K\n\n', T_eq2-288);
+
+% Resolution numerique
+dTdt2 = @(t,T) (Q*(1-alpha_terre) - epsilon*sigma*T^4)/C;
+[t2, T2] = ode45(dTdt2, tspan, T0_K, options);
+t2_years = t2/(365*24*3600);
+
+% Figure 2: Evolution temporelle Modele 2
+figure('Position', [100 100 1400 500]);
+sgtitle('MODELE 2: Avec Emissivite Atmospherique', 'FontSize', 16, 'FontWeight', 'bold');
+
+subplot(1,3,1);
+plot(t2_years, T2, 'r-', 'LineWidth', 2);
+hold on;
+plot(t1_years, T1, 'b--', 'LineWidth', 1.5);
+yline(T_eq2, 'r--', 'LineWidth', 2);
+yline(288, 'g--', 'LineWidth', 2);
+xlabel('Temps (annees)', 'FontSize', 12);
+ylabel('Temperature (K)', 'FontSize', 12);
+title('Evolution temporelle', 'FontSize', 13);
+legend('Modele 2 (\epsilon=0.61)', 'Modele 1 (\epsilon=1)', 'T_{eq,2}', 'Observation', 'Location', 'best');
+grid on;
+
+subplot(1,3,2);
+idx_zoom2 = find(t2_years > 9000 & t2_years < 9010);
+plot(t2_years(idx_zoom2), T2(idx_zoom2), 'r-', 'LineWidth', 1.5);
+xlabel('Temps (annees)', 'FontSize', 12);
+ylabel('Temperature (K)', 'FontSize', 12);
+title('Zoom: Oscillations', 'FontSize', 13);
+grid on;
+
+subplot(1,3,3);
+plot(t2_years, T2-273.15, 'r-', 'LineWidth', 2);
+hold on;
+yline(T_eq2-273.15, 'r--', 'LineWidth', 2);
+yline(15, 'g--', 'LineWidth', 2);
+xlabel('Temps (annees)', 'FontSize', 12);
+ylabel('Temperature (C)', 'FontSize', 12);
+title('Evolution en Celsius', 'FontSize', 13);
+legend('Modele 2', 'T_{eq}', 'Observation', 'Location', 'best');
+grid on;
+
+saveas(gcf, 'modele2_evolution.png');
+
+%% Analyse de sensibilite a epsilon
+fprintf('Analyse de sensibilite a epsilon...\n');
+
+epsilon_range = linspace(0.1, 1, 100);
+T_eq_epsilon = ((Q*(1-alpha_terre))./(epsilon_range*sigma)).^0.25;
+
+figure('Position', [100 100 1400 500]);
+sgtitle('MODELE 2: Analyse de Sensibilite a l''Emissivite', 'FontSize', 16, 'FontWeight', 'bold');
+
+subplot(1,3,1);
+plot(epsilon_range, T_eq_epsilon, 'r-', 'LineWidth', 2);
+hold on;
+plot(epsilon, T_eq2, 'ro', 'MarkerSize', 12, 'LineWidth', 2);
+yline(288, 'g--', 'LineWidth', 2);
+xlabel('Emissivite \epsilon', 'FontSize', 12);
+ylabel('Temperature d''equilibre (K)', 'FontSize', 12);
+title('T_{eq} en fonction de \epsilon', 'FontSize', 13);
+grid on;
+legend('T_{eq}(\epsilon)', sprintf('Valeur realiste (\\epsilon=%.2f)', epsilon), 'Observation', 'Location', 'best');
+
+subplot(1,3,2);
+plot(epsilon_range, T_eq_epsilon-273.15, 'r-', 'LineWidth', 2);
+hold on;
+plot(epsilon, T_eq2-273.15, 'ro', 'MarkerSize', 12, 'LineWidth', 2);
+yline(15, 'g--', 'LineWidth', 2);
+xlabel('Emissivite \epsilon', 'FontSize', 12);
+ylabel('Temperature d''equilibre (C)', 'FontSize', 12);
+title('T_{eq} en Celsius', 'FontSize', 13);
+grid on;
+legend('Location', 'best');
+
+subplot(1,3,3);
+effet_serre = T_eq_epsilon - T_eq1;
+plot(epsilon_range, effet_serre, 'r-', 'LineWidth', 2);
+hold on;
+plot(epsilon, T_eq2-T_eq1, 'ro', 'MarkerSize', 12, 'LineWidth', 2);
+xlabel('Emissivite \epsilon', 'FontSize', 12);
+ylabel('Effet de serre (K)', 'FontSize', 12);
+title('Amplification par effet de serre', 'FontSize', 13);
+grid on;
+legend('Effet de serre(\epsilon)', 'Valeur actuelle', 'Location', 'best');
+
+saveas(gcf, 'modele2_sensibilite_epsilon.png');
+
+%% Cas extremes d'emissivite
+fprintf('\nCas extremes d''emissivite:\n');
+epsilons_test = [0.2, 0.4, 0.61, 0.8, 1.0];
+for eps_test = epsilons_test
+    T_test = ((Q*(1-alpha_terre))/(eps_test*sigma))^0.25;
+    effet = T_test - T_eq1;
+    fprintf('  epsilon = %.2f: T_eq = %.2f K (%.2f C), effet de serre = +%.2f K\n', ...
+            eps_test, T_test, T_test-273.15, effet);
+end
+fprintf('\n');
+
+%% ========================================================================
+%  PARTIE 4: MODELE 3 - PARAMETRISATION LINEAIRE OLR
+%% ========================================================================
+
+fprintf('--- MODELE 3: Parametrisation lineaire OLR ---\n');
+
+% Temperature d'equilibre (en Celsius)
+T_eq3_C = (Q*(1-alpha_terre) - A)/B;
+T_eq3_K = T_eq3_C + 273.15;
+fprintf('Temperature d''equilibre: %.2f C (%.2f K)\n', T_eq3_C, T_eq3_K);
+fprintf('Ecart avec observation: %.2f K\n\n', T_eq3_C - 15);
+
+% Resolution numerique (T en Celsius)
+dTdt3 = @(t,T) (Q*(1-alpha_terre) - A - B*T)/C;
+[t3, T3] = ode45(dTdt3, tspan, T0_C, options);
+t3_years = t3/(365*24*3600);
+
+% Figure 3: Evolution temporelle Modele 3
+figure('Position', [100 100 1400 500]);
+sgtitle('MODELE 3: Parametrisation Lineaire OLR', 'FontSize', 16, 'FontWeight', 'bold');
+
+subplot(1,3,1);
+plot(t3_years, T3, 'g-', 'LineWidth', 2);
+hold on;
+yline(T_eq3_C, 'g--', 'LineWidth', 2);
+yline(15, 'k--', 'LineWidth', 2);
+xlabel('Temps (annees)', 'FontSize', 12);
+ylabel('Temperature (C)', 'FontSize', 12);
+title('Evolution temporelle', 'FontSize', 13);
+legend('Modele 3', 'T_{eq}', 'Observation', 'Location', 'best');
+grid on;
+
+subplot(1,3,2);
+idx_zoom3 = find(t3_years > 9000 & t3_years < 9010);
+plot(t3_years(idx_zoom3), T3(idx_zoom3), 'g-', 'LineWidth', 1.5);
+xlabel('Temps (annees)', 'FontSize', 12);
+ylabel('Temperature (C)', 'FontSize', 12);
+title('Zoom: Oscillations', 'FontSize', 13);
+grid on;
+
+% Comparaison avec modeles precedents
+subplot(1,3,3);
+plot(t1_years, T1-273.15, 'b-', 'LineWidth', 2); hold on;
+plot(t2_years, T2-273.15, 'r-', 'LineWidth', 2);
+plot(t3_years, T3, 'g-', 'LineWidth', 2);
+yline(15, 'k--', 'LineWidth', 2);
+xlabel('Temps (annees)', 'FontSize', 12);
+ylabel('Temperature (C)', 'FontSize', 12);
+title('Comparaison Modeles 1-2-3', 'FontSize', 13);
+legend('Modele 1', 'Modele 2', 'Modele 3', 'Observation', 'Location', 'best');
+grid on;
+xlim([0 100]);
+
+saveas(gcf, 'modele3_evolution.png');
+
+%% Analyse de la parametrisation OLR
+fprintf('Analyse de la parametrisation OLR...\n');
+
+T_celsius_range = -50:0.5:50;
+OLR = A + B*T_celsius_range;
+OLR_stefan = epsilon*sigma*(T_celsius_range+273.15).^4;
+
+figure('Position', [100 100 1400 500]);
+sgtitle('MODELE 3: Analyse de la Parametrisation OLR', 'FontSize', 16, 'FontWeight', 'bold');
+
+subplot(1,3,1);
+plot(T_celsius_range, OLR, 'g-', 'LineWidth', 2); hold on;
+plot(T_celsius_range, OLR_stefan, 'r--', 'LineWidth', 2);
+plot(T_eq3_C, A+B*T_eq3_C, 'go', 'MarkerSize', 12, 'LineWidth', 2);
+xlabel('Temperature (C)', 'FontSize', 12);
+ylabel('OLR (W/m^2)', 'FontSize', 12);
+title('Rayonnement sortant (OLR)', 'FontSize', 13);
+legend('OLR lineaire (A+BT)', 'Stefan-Boltzmann', 'Point d''equilibre', 'Location', 'best');
+grid on;
+
+subplot(1,3,2);
+ASR = Q*(1-alpha_terre);
+plot(T_celsius_range, OLR, 'g-', 'LineWidth', 2); hold on;
+yline(ASR, 'b-', 'LineWidth', 2);
+plot(T_eq3_C, A+B*T_eq3_C, 'ro', 'MarkerSize', 12, 'LineWidth', 2);
+xlabel('Temperature (C)', 'FontSize', 12);
+ylabel('Flux (W/m^2)', 'FontSize', 12);
+title('Bilan energetique', 'FontSize', 13);
+legend('OLR', 'ASR (absorbe)', 'Equilibre', 'Location', 'best');
+grid on;
+
+subplot(1,3,3);
+bilan = ASR - OLR;
+plot(T_celsius_range, bilan, 'b-', 'LineWidth', 2); hold on;
+yline(0, 'k--', 'LineWidth', 1.5);
+plot(T_eq3_C, 0, 'ro', 'MarkerSize', 12, 'LineWidth', 2);
+xlabel('Temperature (C)', 'FontSize', 12);
+ylabel('Bilan (W/m^2)', 'FontSize', 12);
+title('ASR - OLR', 'FontSize', 13);
+legend('Bilan energetique', 'Equilibre', 'Point d''equilibre', 'Location', 'best');
+grid on;
+
+saveas(gcf, 'modele3_analyse_OLR.png');
+
+%% ========================================================================
+%  PARTIE 5: MODELE 4 - ALBEDO VARIABLE AVEC TEMPERATURE
+%% ========================================================================
+
+fprintf('--- MODELE 4: Albedo variable avec temperature ---\n');
+
+% Fonction albedo dependant de la temperature
+alpha_func = @(T) 0.5 + 0.2*tanh((T-273.15)/5);
+
+% Visualisation de la fonction albedo
+T_range_K = 250:0.1:310;
+alpha_values = arrayfun(alpha_func, T_range_K);
+
+figure('Position', [100 100 1400 500]);
+sgtitle('MODELE 4: Retroaction Glace-Albedo', 'FontSize', 16, 'FontWeight', 'bold');
+
+subplot(1,3,1);
+plot(T_range_K-273.15, alpha_values, 'b-', 'LineWidth', 2);
+hold on;
+plot(288-273.15, alpha_func(288), 'ro', 'MarkerSize', 12, 'LineWidth', 2);
+xlabel('Temperature (C)', 'FontSize', 12);
+ylabel('Albedo \alpha(T)', 'FontSize', 12);
+title('Fonction albedo(T)', 'FontSize', 13);
+grid on;
+legend('\alpha(T)', 'Conditions actuelles', 'Location', 'best');
+
+subplot(1,3,2);
+ASR_variable = Q*(1-alpha_values);
+OLR_stefan_range = A + B*(T_range_K-273.15);
+plot(T_range_K-273.15, ASR_variable, 'b-', 'LineWidth', 2); hold on;
+plot(T_range_K-273.15, OLR_stefan_range, 'r-', 'LineWidth', 2);
+xlabel('Temperature (C)', 'FontSize', 12);
+ylabel('Flux (W/m^2)', 'FontSize', 12);
+title('ASR et OLR avec albedo variable', 'FontSize', 13);
+legend('ASR = Q(1-\alpha(T))', 'OLR = A+BT', 'Location', 'best');
+grid on;
+
+subplot(1,3,3);
+bilan_variable = ASR_variable - OLR_stefan_range;
+plot(T_range_K-273.15, bilan_variable, 'b-', 'LineWidth', 2); hold on;
+yline(0, 'k--', 'LineWidth', 1.5);
+xlabel('Temperature (C)', 'FontSize', 12);
+ylabel('Bilan (W/m^2)', 'FontSize', 12);
+title('Bilan energetique', 'FontSize', 13);
+grid on;
+
+% Trouver les points d'equilibre
+idx_equilibres = find(abs(bilan_variable) < 0.5);
+if ~isempty(idx_equilibres)
+    T_equilibres = T_range_K(idx_equilibres);
+    for i = 1:length(T_equilibres)
+        plot(T_equilibres(i)-273.15, 0, 'ro', 'MarkerSize', 10, 'LineWidth', 2);
+    end
+    fprintf('Points d''equilibre trouves:\n');
+    for i = 1:length(T_equilibres)
+        fprintf('  T_eq_%d = %.2f K (%.2f C)\n', i, T_equilibres(i), T_equilibres(i)-273.15);
+    end
+end
+legend('Bilan', 'Equilibre', 'Points d''equilibre', 'Location', 'best');
+
+saveas(gcf, 'modele4_retroaction_albedo.png');
+
+%% Resolution numerique avec differentes conditions initiales
+fprintf('\nSimulation avec differentes conditions initiales...\n');
+
+dTdt4 = @(t,T) (Q*(1-alpha_func(T)) - A - B*(T-273.15))/C;
+
+T0_range = [260, 270, 280, 288, 295, 305];
+colors = lines(length(T0_range));
+
+figure('Position', [100 100 1400 500]);
+sgtitle('MODELE 4: Simulations avec Differentes CI', 'FontSize', 16, 'FontWeight', 'bold');
+
+subplot(1,2,1);
+hold on;
+for i = 1:length(T0_range)
+    [t4, T4] = ode45(dTdt4, tspan, T0_range(i), options);
+    t4_years = t4/(365*24*3600);
+    plot(t4_years, T4-273.15, 'Color', colors(i,:), 'LineWidth', 2);
+end
+xlabel('Temps (annees)', 'FontSize', 12);
+ylabel('Temperature (C)', 'FontSize', 12);
+title('Evolution temporelle', 'FontSize', 13);
+legend(arrayfun(@(x) sprintf('T_0 = %.0f K', x), T0_range, 'UniformOutput', false), 'Location', 'best');
+grid on;
+xlim([0 1000]);
+
+subplot(1,2,2);
+hold on;
+for i = 1:length(T0_range)
+    [t4, T4] = ode45(dTdt4, tspan, T0_range(i), options);
+    t4_years = t4/(365*24*3600);
+    plot(t4_years, T4-273.15, 'Color', colors(i,:), 'LineWidth', 2);
+end
+xlabel('Temps (annees)', 'FontSize', 12);
+ylabel('Temperature (C)', 'FontSize', 12);
+title('Vue d''ensemble (10000 ans)', 'FontSize', 13);
+grid on;
+
+saveas(gcf, 'modele4_simulations_CI.png');
+
+% Simulation avec conditions actuelles
+[t4_final, T4_final] = ode45(dTdt4, tspan, 288, options);
+T_eq4 = T4_final(end);
+fprintf('Temperature finale (CI=288K): %.2f K (%.2f C)\n', T_eq4, T_eq4-273.15);
+fprintf('Ecart avec observation: %.2f K\n\n', T_eq4-288);
+
+%% ========================================================================
+%  PARTIE 6: COMPARAISON GLOBALE DES 4 MODELES
+%% ========================================================================
+
+fprintf('========================================\n');
+fprintf('COMPARAISON GLOBALE DES MODELES\n');
+fprintf('========================================\n\n');
+
+% Tableau recapitulatif
+fprintf('Modele | T_eq (K) | T_eq (C) | Ecart (K) | Erreur relative\n');
+fprintf('-------|----------|----------|-----------|----------------\n');
+fprintf('Mod. 1 | %8.2f | %8.2f | %9.2f | %14.1f%%\n', T_eq1, T_eq1-273.15, T_eq1-288, abs(T_eq1-288)/288*100);
+fprintf('Mod. 2 | %8.2f | %8.2f | %9.2f | %14.1f%%\n', T_eq2, T_eq2-273.15, T_eq2-288, abs(T_eq2-288)/288*100);
+fprintf('Mod. 3 | %8.2f | %8.2f | %9.2f | %14.1f%%\n', T_eq3_K, T_eq3_C, T_eq3_C-15, abs(T_eq3_C-15)/288*100);
+fprintf('Mod. 4 | %8.2f | %8.2f | %9.2f | %14.1f%%\n', T_eq4, T_eq4-273.15, T_eq4-288, abs(T_eq4-288)/288*100);
+fprintf('-------|----------|----------|-----------|----------------\n');
+fprintf('Observ.| %8.2f | %8.2f |     -     |       -\n\n', 288, 15);
+
+% Figure comparative finale
+figure('Position', [100 100 1600 900]);
+sgtitle('COMPARAISON GLOBALE DES 4 MODELES', 'FontSize', 18, 'FontWeight', 'bold');
+
+% Subplot 1: Evolution temporelle (K)
+subplot(2,3,1);
+plot(t1_years, T1, 'b-', 'LineWidth', 2); hold on;
+plot(t2_years, T2, 'r-', 'LineWidth', 2);
+plot(t3_years, T3+273.15, 'g-', 'LineWidth', 2);
+plot(t4_years, T4_final, 'm-', 'LineWidth', 2);
+yline(288, 'k--', 'LineWidth', 2);
+xlabel('Temps (annees)', 'FontSize', 11);
+ylabel('Temperature (K)', 'FontSize', 11);
+title('Evolution temporelle (Kelvin)', 'FontSize', 12);
+legend('Modele 1', 'Modele 2', 'Modele 3', 'Modele 4', 'Observation', 'Location', 'best');
+grid on;
+xlim([0 1000]);
+
+% Subplot 2: Evolution temporelle (C)
+subplot(2,3,2);
+plot(t1_years, T1-273.15, 'b-', 'LineWidth', 2); hold on;
+plot(t2_years, T2-273.15, 'r-', 'LineWidth', 2);
+plot(t3_years, T3, 'g-', 'LineWidth', 2);
+plot(t4_years, T4_final-273.15, 'm-', 'LineWidth', 2);
+yline(15, 'k--', 'LineWidth', 2);
+xlabel('Temps (annees)', 'FontSize', 11);
+ylabel('Temperature (C)', 'FontSize', 11);
+title('Evolution temporelle (Celsius)', 'FontSize', 12);
+legend('Modele 1', 'Modele 2', 'Modele 3', 'Modele 4', 'Observation', 'Location', 'best');
+grid on;
+xlim([0 1000]);
+
+% Subplot 3: Temperatures d'equilibre
+subplot(2,3,3);
+modeles_labels = {'Mod. 1', 'Mod. 2', 'Mod. 3', 'Mod. 4', 'Obs.'};
+T_equilibres_C = [T_eq1-273.15, T_eq2-273.15, T_eq3_C, T_eq4-273.15, 15];
+colors_bars = [0.2 0.4 0.8; 0.8 0.2 0.2; 0.2 0.8 0.2; 0.8 0.2 0.8; 0.5 0.5 0.5];
+b = bar(T_equilibres_C);
+b.FaceColor = 'flat';
+b.CData = colors_bars;
+hold on;
+yline(15, 'k--', 'LineWidth', 2);
+set(gca, 'XTickLabel', modeles_labels);
+ylabel('Temperature d''equilibre (C)', 'FontSize', 11);
+title('Comparaison des temperatures d''equilibre', 'FontSize', 12);
+grid on;
+for i = 1:length(T_equilibres_C)
+    text(i, T_equilibres_C(i)+1.5, sprintf('%.1f C', T_equilibres_C(i)), ...
+         'HorizontalAlignment', 'center', 'FontSize', 10, 'FontWeight', 'bold');
+end
+
+% Subplot 4: Erreurs absolues
+subplot(2,3,4);
+erreurs_abs = abs(T_equilibres_C(1:4) - 15);
+b = bar(erreurs_abs);
+b.FaceColor = [0.8 0.3 0.3];
+set(gca, 'XTickLabel', modeles_labels(1:4));
+ylabel('Erreur absolue (K)', 'FontSize', 11);
+title('Ecart avec l''observation', 'FontSize', 12);
+grid on;
+for i = 1:length(erreurs_abs)
+    text(i, erreurs_abs(i)+0.5, sprintf('%.1f K', erreurs_abs(i)), ...
+         'HorizontalAlignment', 'center', 'FontSize', 10, 'FontWeight', 'bold');
+end
+
+% Subplot 5: Erreurs relatives
+subplot(2,3,5);
+erreurs_rel = abs(T_equilibres_C(1:4) - 15)./288 * 100;
+b = bar(erreurs_rel);
+b.FaceColor = [0.3 0.6 0.8];
+set(gca, 'XTickLabel', modeles_labels(1:4));
+ylabel('Erreur relative (%)', 'FontSize', 11);
+title('Erreur relative', 'FontSize', 12);
+grid on;
+for i = 1:length(erreurs_rel)
+    text(i, erreurs_rel(i)+0.5, sprintf('%.2f%%', erreurs_rel(i)), ...
+         'HorizontalAlignment', 'center', 'FontSize', 10, 'FontWeight', 'bold');
+end
+
+% Subplot 6: Zoom sur convergence
+subplot(2,3,6);
+plot(t1_years, T1-273.15, 'b-', 'LineWidth', 2); hold on;
+plot(t2_years, T2-273.15, 'r-', 'LineWidth', 2);
+plot(t3_years, T3, 'g-', 'LineWidth', 2);
+plot(t4_years, T4_final-273.15, 'm-', 'LineWidth', 2);
+yline(15, 'k--', 'LineWidth', 2);
+xlabel('Temps (annees)', 'FontSize', 11);
+ylabel('Temperature (C)', 'FontSize', 11);
+title('Zoom: Convergence initiale', 'FontSize', 12);
+legend('Modele 1', 'Modele 2', 'Modele 3', 'Modele 4', 'Observation', 'Location', 'best');
+grid on;
+xlim([0 50]);
+
+saveas(gcf, 'comparaison_globale_4_modeles.png');
+
+%% Figure supplementaire: Mecanismes physiques
+figure('Position', [100 100 1400 500]);
+sgtitle('MECANISMES PHYSIQUES DES MODELES', 'FontSize', 16, 'FontWeight', 'bold');
+
+% Subplot 1: Bilan energetique
+subplot(1,3,1);
+ASR = Q*(1-alpha_terre);
+OLR1 = sigma*T_eq1^4;
+OLR2 = epsilon*sigma*T_eq2^4;
+OLR3 = A + B*T_eq3_C;
+OLR4 = A + B*(T_eq4-273.15);
+
+flux_labels = {'ASR', 'OLR_1', 'OLR_2', 'OLR_3', 'OLR_4'};
+flux_values = [ASR, OLR1, OLR2, OLR3, OLR4];
+b = bar(flux_values);
+set(gca, 'XTickLabel', flux_labels);
+ylabel('Flux (W/m^2)', 'FontSize', 11);
+title('Flux energetiques', 'FontSize', 12);
+grid on;
+for i = 1:length(flux_values)
+    text(i, flux_values(i)+5, sprintf('%.1f', flux_values(i)), ...
+         'HorizontalAlignment', 'center', 'FontSize', 9);
+end
+
+% Subplot 2: Effet de serre
+subplot(1,3,2);
+effet_serre_models = [0, T_eq2-T_eq1, T_eq3_K-T_eq1, T_eq4-T_eq1];
+b = bar(effet_serre_models);
+b.FaceColor = [0.9 0.5 0.2];
+set(gca, 'XTickLabel', modeles_labels(1:4));
+ylabel('Effet de serre (K)', 'FontSize', 11);
+title('Amplification par effet de serre', 'FontSize', 12);
+grid on;
+for i = 1:length(effet_serre_models)
+    if effet_serre_models(i) > 0.1
+        text(i, effet_serre_models(i)+1, sprintf('+%.1f K', effet_serre_models(i)), ...
+             'HorizontalAlignment', 'center', 'FontSize', 10);
+    end
+end
+
+% Subplot 3: Contribution des parametres
+subplot(1,3,3);
+categories = {'Sans atmosphere', 'Avec atmosphere', 'OLR lineaire', 'Albedo variable'};
+contributions = [T_eq1-273.15; T_eq2-273.15; T_eq3_C; T_eq4-273.15];
+b = barh(contributions);
+b.FaceColor = 'flat';
+b.CData = colors_bars(1:4,:);
+hold on;
+xline(15, 'k--', 'LineWidth', 2);
+set(gca, 'YTickLabel', categories);
+xlabel('Temperature d''equilibre (C)', 'FontSize', 11);
+title('Contribution progressive', 'FontSize', 12);
+grid on;
+
+saveas(gcf, 'mecanismes_physiques.png');
+
+%% ========================================================================
+%  PARTIE 7: SAUVEGARDE DES DONNEES
+%% ========================================================================
+
+fprintf('Sauvegarde des resultats...\n');
+
+% Structure de donnees
+resultats.parametres.Q = Q;
+resultats.parametres.alpha = alpha_terre;
+resultats.parametres.sigma = sigma;
+resultats.parametres.C = C;
+resultats.parametres.epsilon = epsilon;
+resultats.parametres.A = A;
+resultats.parametres.B = B;
+
+resultats.modele1.T_eq = T_eq1;
+resultats.modele1.temps = t1_years;
+resultats.modele1.temperature = T1;
+
+resultats.modele2.T_eq = T_eq2;
+resultats.modele2.temps = t2_years;
+resultats.modele2.temperature = T2;
+
+resultats.modele3.T_eq = T_eq3_K;
+resultats.modele3.temps = t3_years;
+resultats.modele3.temperature = T3 + 273.15;
+
+resultats.modele4.T_eq = T_eq4;
+resultats.modele4.temps = t4_years;
+resultats.modele4.temperature = T4_final;
+
+save('resultats_simulation_climat.mat', 'resultats');
+
+fprintf('\nTous les resultats ont ete sauvegardes!\n');
+fprintf('Fichier: resultats_simulation_climat.mat\n\n');
+
+fprintf('========================================\n');
+fprintf('SIMULATION TERMINEE AVEC SUCCES!\n');
+fprintf('========================================\n');
+fprintf('\nFigures generees:\n');
+fprintf('  - modele1_evolution.png\n');
+fprintf('  - modele1_sensibilite_albedo.png\n');
+fprintf('  - modele2_evolution.png\n');
+fprintf('  - modele2_sensibilite_epsilon.png\n');
+fprintf('  - modele3_evolution.png\n');
+fprintf('  - modele3_analyse_OLR.png\n');
+fprintf('  - modele4_retroaction_albedo.png\n');
+fprintf('  - modele4_simulations_CI.png\n');
+fprintf('  - comparaison_globale_4_modeles.png\n');
+fprintf('  - mecanismes_physiques.png\n\n');
